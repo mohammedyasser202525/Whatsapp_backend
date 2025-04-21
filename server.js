@@ -249,10 +249,32 @@ app.post('/disconnect', async (req, res) => {
     }
 });
 
+function formatPhoneNumber(number, countryCode) {
+  let phone = number.toString().replace(/\D/g, '');
+
+  switch (countryCode) {
+    case 'SA':
+      phone = phone.startsWith('0') ? phone.substring(1) : phone;
+      if (!phone.startsWith('966')) {
+        phone = `966${phone}`;
+      }
+      break;
+    case '20':
+      if (!phone.startsWith('20')) {
+        phone = `20${phone}`;
+      }
+      break;
+    default:
+      break;
+  }
+  
+  return phone;
+}
+
 // New endpoint for sending a single media file with caption
 app.post('/send-single-media', async (req, res) => {
     try {
-        const { numbers, mediaPath, caption } = req.body;
+        const { numbers, mediaPath, caption, country } = req.body;
         
         if (!client) {
             return res.status(400).json({ error: 'WhatsApp client not initialized' });
@@ -266,11 +288,8 @@ app.post('/send-single-media', async (req, res) => {
 
         for (const number of numbers) {
             try {
-                let formattedNumber = number.toString().replace(/\D/g, '');
-                if (!formattedNumber.startsWith('20')) {
-                    formattedNumber = '20' + formattedNumber;
-                }
-                const chatId = `${formattedNumber}@c.us`;
+                const formattedNumber = formatPhoneNumber(number, country); 
+                const chatId = `${formattedNumber}@c.us`; 
 
                 const isRegistered = await client.isRegisteredUser(chatId);
                 if (!isRegistered) {
@@ -308,7 +327,7 @@ app.post('/send-single-media', async (req, res) => {
 
             } catch (error) {
                 results.failed.push({
-                    number,
+                    number: formattedNumber,
                     reason: error.message
                 });
             }
@@ -324,7 +343,7 @@ app.post('/send-single-media', async (req, res) => {
 // Modified bulk messages endpoint to handle individual captions
 app.post('/send-bulk-messages', async (req, res) => {
     try {
-        const { numbers, message, mediaFiles } = req.body;
+        const { numbers, message, mediaFiles, country } = req.body;
         
         if (!client) {
             return res.status(400).json({ error: 'WhatsApp client not initialized' });
@@ -337,19 +356,16 @@ app.post('/send-bulk-messages', async (req, res) => {
         const results = { success: [], failed: [] };
 
         for (const number of numbers) {
+            let formattedNumber;
             try {
-                let formattedNumber = number.toString().replace(/\D/g, '');
-                if (!formattedNumber.startsWith('20')) {
-                    formattedNumber = '20' + formattedNumber;
-                }
-                const chatId = `${formattedNumber}@c.us`;
+                formattedNumber = formatPhoneNumber(number, country); // التنسيق بناءً على الدولة
+                const chatId = `${formattedNumber}@c.us`; // استخدام الرقم المنسق
 
                 const isRegistered = await client.isRegisteredUser(chatId);
                 if (!isRegistered) {
                     throw new Error('رقم غير مسجل في واتساب');
                 }
 
-                // Send text message if provided
                 if (message) {
                     await client.sendMessage(chatId, message);
                     await new Promise(resolve => setTimeout(resolve, 1000));
@@ -399,7 +415,7 @@ app.post('/send-bulk-messages', async (req, res) => {
 
             } catch (error) {
                 results.failed.push({
-                    number,
+                    number: formattedNumber || number,
                     reason: error.message
                 });
             }
